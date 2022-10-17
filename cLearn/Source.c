@@ -8,7 +8,7 @@
 typedef struct
 {
 	float x, y;
-	float dy;
+	float dx, dy;
 	short life;
 	char *name;
 	int onLedge;
@@ -22,11 +22,9 @@ typedef struct {
 typedef struct
 {
 	Man man;
-
 	Star stars[100];
-
 	Ledge ledges[100];
-
+	SDL_Texture *grounds;
 	SDL_Texture *clouds;
 	SDL_Texture *star;
 	SDL_Texture *manFrames[7];
@@ -37,6 +35,7 @@ typedef struct
 void process(GameState *game)
 {
 	Man *man = &game->man;
+	man->x += man->dx;
 	man->y += man->dy;
 
 	man->dy += GRAVITY;
@@ -50,42 +49,63 @@ void collisionDetect(GameState *game)
 		float mx = game->man.x, my = game->man.y;
 		float bx = game->ledges[i].x, by = game->ledges[i].y, bw = game->ledges[i].w, bh = game->ledges[i].h;
 
-		if (my + mh > by && my < by + bh)
+		if (mx + mw / 2 > bx && mx + mw / 2 < bx + bw)
 		{
-			if (mx < bx+bw && mx+mw > bx+bw)
+			if (my < by + bh && my > by && game->man.dy < 0)
 			{
-				game->man.x = bx + bw;
-				mx = bx + bw;
-			}
-			else if(mx+mw > bx && mx < bx)
-			{
-				game->man.x = bx - mw;
-				mx = bx - mw;
+				game->man.y = by + bh;
+				my = by + bh;
+				game->man.dy = 0;
+				game->man.onLedge = 1;
 			}
 		}
 
 		if (mx + mw > bx && mx < bx + bw)
 		{
-			if (my < by + bh && my > by) {
-				game->man.y = by + bh;
+			if (my + mh > by && my < by && game->man.dy > 0)
+			{
+				game->man.y = by - mh;
+				my = by - mh;
+
 				game->man.dy = 0;
 				game->man.onLedge = 1;
 			}
-			else if (my+mh > by && my < by)
-			{
-				game->man.y = by - mh;
-				game->man.dy = 0;
-				game->man.onLedge = 1;
+		}
 
+		if (my + mh > by && my < by + bh)
+		{
+			if (mx < bx+bw && mx+mw > bx+bw && game->man.dx < 0)
+			{
+				game->man.x = bx + bw;
+				mx = bx + bw;
+
+				game->man.dx = 0;
+			}
+			else if(mx+mw > bx && mx < bx && game->man.dx > 0)
+			{
+				game->man.x = bx - mw;
+				mx = bx - mw;
+
+				game->man.dx = 0;
 			}
 		}
 	}
 }
 
-void loadImg(GameState* game, SDL_Surface* surface, char fileName[]) 
-{
-	surface = IMG_Load;
-}
+//void loadImg(GameState* game, SDL_Texture *texture, char fileName[]) 
+//{
+//	SDL_Surface* surface = NULL;
+//
+//	surface = IMG_Load(fileName);
+//	if (surface == NULL)
+//	{
+//		printf("Cannot find %s \n\n", fileName);
+//		SDL_Quit();
+//		exit(1);
+//	}
+//	texture = SDL_CreateTextureFromSurface(game->renderer, surface);
+//	SDL_FreeSurface(surface);
+//}
 
 void loadGame(GameState* game) 
 {
@@ -109,6 +129,16 @@ void loadGame(GameState* game)
 		exit(1);
 	}
 	game->clouds = SDL_CreateTextureFromSurface(game->renderer, surface);
+	SDL_FreeSurface(surface);
+
+	surface = IMG_Load("./images/grounds.png");
+	if (surface == NULL)
+	{
+		printf("Cannot find grounds.png \n\n");
+		SDL_Quit();
+		exit(1);
+	}
+	game->grounds = SDL_CreateTextureFromSurface(game->renderer, surface);
 	SDL_FreeSurface(surface);
 
 	surface = IMG_Load("./images/bridge.png");
@@ -191,8 +221,8 @@ void loadGame(GameState* game)
 	game->manFrames[6] = SDL_CreateTextureFromSurface(game->renderer, surface);
 	SDL_FreeSurface(surface);
 
-	game->man.x = 320 - 40;
-	game->man.y = 240 - 40;
+	game->man.x = 640 - 64;
+	game->man.y = 360 - 64;
 	game->man.dy = 0;
 	game->man.onLedge = 0;
 
@@ -254,13 +284,27 @@ int processEvent(SDL_Window *window, GameState *game)
 
 	const Uint8 *state = SDL_GetKeyboardState(NULL);
 	if (state[SDL_SCANCODE_LEFT])
-		game->man.x -= 5;
-	if (state[SDL_SCANCODE_RIGHT])
-		game->man.x += 5;
-	/*if (state[SDL_SCANCODE_UP])
-		game->man.y -= 10;
-	if (state[SDL_SCANCODE_DOWN])
-		game->man.y += 10;*/
+	{
+		game->man.dx -= 0.5;
+		if (game->man.dx < -6)
+		{	
+			game->man.dx = -6;
+		}
+	}
+	else if (state[SDL_SCANCODE_RIGHT])
+	{
+		game->man.dx += 0.5;
+		if (game->man.dx > 6)
+		{
+			game->man.dx = -6;
+		}
+	}
+	else
+	{
+		game->man.dx *= 0.8f;
+		if (fabsf(game->man.dx) < 0.1f)
+			game->man.dx = 0;
+	}
 	return done;
 }
 
@@ -271,12 +315,12 @@ void doRender(SDL_Renderer *renderer, GameState *game)
 	SDL_RenderClear(renderer);
 
 	SDL_RenderCopy(renderer, game->clouds, NULL, NULL);
+	SDL_RenderCopy(renderer, game->grounds, NULL, NULL);
 
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 
-	SDL_Rect rect = { game->man.x, game->man.y, 64, 64 };
-	SDL_RenderCopyEx(renderer, game->manFrames[0], NULL, &rect, 0, NULL, 0);
-	//SDL_RenderFillRect(renderer, &rect);
+	SDL_Rect man = { game->man.x, game->man.y, 64, 64 };
+	SDL_RenderCopyEx(renderer, game->manFrames[0], NULL, &man, 0, NULL, 0);
 
 	for (int i = 0; i < 100; i++)
 	{
@@ -303,7 +347,7 @@ int main()
 
 	srand((int)time(NULL));
 
-	window = SDL_CreateWindow("C Language Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, 0);
+	window = SDL_CreateWindow("C Language Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1080, 720, 0);
 
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
@@ -322,19 +366,6 @@ int main()
 
 		doRender(renderer, &gameState);
 	}
-
-	/*SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-
-	SDL_RenderClear(renderer);
-
-	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-
-	SDL_Rect rect = { 220, 140, 200, 200 };
-	SDL_RenderFillRect(renderer, &rect);
-
-	SDL_RenderPresent(renderer);
-
-	SDL_Delay(2000);*/
 
 	SDL_DestroyTexture(gameState.star);
 	SDL_DestroyWindow(window);
